@@ -24,7 +24,6 @@ def openAIapi(text):
     )
     # 生成されたPythonコードを取得
     generated_code = response.choices[0].text
-    #print(generated_code)
     return generated_code
 
 def mentionremove(text):
@@ -37,19 +36,44 @@ def mentionremove(text):
         cleaned_message = cleaned_message.replace(mention, '')#メッセージ
     return cleaned_message
 
+def isSlackRetryMessage(event):
+    request_header = event["headers"]
+    keys = request_header.keys()
+    logging.info(request_header)
+    logging.info(keys)
+    return ("X-Slack-Retry-Num" in keys)# or ("x-slack-retry-reason" in keys) or (request_header["x-slack-retry-reason"] == "http_timeout")
+
 
 def handler(event, context):
+    #受信したjsonをLogsに出力
+    logging.info(json.loads(event.get('body')))
+    #logging.info(json.loads(event.get('headers')))
     #getenv
     OAUTH_TOKEN = os.environ['OAUTH_TOKEN']
     BOT_TOKEN = os.environ['BOT_TOKEN']
+    
+    # タイムアウトが原因のSlack Events APIの再送を止める処理
+    if (isSlackRetryMessage(event)):
+        return {
+            'statusCode': 200,
+            'body': {
+                'message': 'No need to resend'
+            }
+        }
+    
+    
 
-    #受信したjsonをLogsに出力
-    logging.info(json.dumps(event))
-
-    print (type(event))
+    #print (type(event))
     # json処理
     if 'body' in event:
         body = json.loads(event.get('body'))
+        #if ('type' in body) & (body['type'] == 'url_verification'):
+        #    return body['challenge']
+        #if 'X-Slack-Retry-Num' in event.headers or event.headers['X-Slack-Retry-Reason'] == "http_timeout":
+        #    return {
+        #        'statusCode': 200,
+        #        'body': json.dumps({'message': 'No need to resend'})
+        #    }
     elif 'token' in event:
         body = event
     else:
@@ -110,4 +134,6 @@ def handler(event, context):
     req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), method='POST', headers=headers)
     res = urllib.request.urlopen(req)
     logger.info('post result: %s', res.msg)
+    # Return Slack challenge parameter
+    #return body.get('challenge')
     return {'statusCode': 200, 'body': 'ok'}
